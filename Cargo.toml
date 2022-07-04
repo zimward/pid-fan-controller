@@ -1,0 +1,13 @@
+[package]
+name = "pidfancontroller"
+version = "0.1.0"
+edition = "2021"
+target = "stable-x86_64-unknown-linux-gnu"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lite-json="0.1.3"
+
+[release]
+codegen-units=1
+lto = true
