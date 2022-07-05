@@ -309,22 +309,30 @@ fn main() {
     }));
     let (mut heat_srcs, fans, interval) = parse_config();
     let interval_seconds: f32 = (interval as f32) / 1000.0;
-    for fan in &fans {
-        fan.pwm_enable(true);
+    let mut enable = true;
+    if let Some(arg) = std::env::args().nth(1) {
+        if arg == "disable" {
+            enable = false;
+        }
     }
-    loop {
-        for heat_src in &mut heat_srcs {
-            heat_src.run_pwm(interval_seconds);
-        }
-        for fan in &fans {
-            let mut highest_pressure: f32 = 0.0;
-            for prs_src in &fan.heat_pressure_srcs {
-                if heat_srcs[*prs_src].last_pid > highest_pressure {
-                    highest_pressure = heat_srcs[*prs_src].last_pid;
-                }
+    for fan in &fans {
+        fan.pwm_enable(enable);
+    }
+    if enable {
+        loop {
+            for heat_src in &mut heat_srcs {
+                heat_src.run_pwm(interval_seconds);
             }
-            fan.set_speed(highest_pressure);
+            for fan in &fans {
+                let mut highest_pressure: f32 = 0.0;
+                for prs_src in &fan.heat_pressure_srcs {
+                    if heat_srcs[*prs_src].last_pid > highest_pressure {
+                        highest_pressure = heat_srcs[*prs_src].last_pid;
+                    }
+                }
+                fan.set_speed(highest_pressure);
+            }
+            thread::sleep(Duration::from_millis(interval.into()));
         }
-        thread::sleep(Duration::from_millis(interval.into()));
     }
 }
