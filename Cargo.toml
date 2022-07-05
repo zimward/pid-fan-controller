@@ -1,5 +1,5 @@
 [package]
-name = "pidfancontroller"
+name = "pid-fan-controller"
 version = "0.1.0"
 edition = "2021"
 target = "stable-x86_64-unknown-linux-gnu"
