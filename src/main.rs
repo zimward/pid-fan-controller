@@ -40,7 +40,7 @@ struct Fan {
     min_pwm: u32,
     max_pwm: u32,
     cutoff: bool,
-    heat_pressure_srcs: Vec<i32>,
+    heat_pressure_srcs: Vec<usize>,
     pwm: PathBuf,
 }
 
@@ -49,7 +49,7 @@ impl Fan {
         min_pwm: u32,
         max_pwm: u32,
         cutoff: bool,
-        heat_pressure_srcs: Vec<i32>,
+        heat_pressure_srcs: Vec<usize>,
         pwm: PathBuf,
     ) -> Fan {
         Fan {
@@ -61,7 +61,7 @@ impl Fan {
         }
     }
     fn set_speed(&self, speed: f32) {
-        let mut pwm_duty: u32 = 0;
+        let mut pwm_duty: u32;
         unsafe {
             pwm_duty = self.min_pwm
                 + (((self.max_pwm - self.min_pwm) as f32) * speed)
@@ -71,7 +71,7 @@ impl Fan {
         if pwm_duty == self.min_pwm && self.cutoff {
             pwm_duty = 0;
         }
-        write(self.pwm.clone(), pwm_duty.to_string().as_bytes());
+        write(self.pwm.clone(), pwm_duty.to_string().as_bytes()).unwrap();
     }
     fn pwm_enable(&self, enable: bool) {
         let mut path = self.pwm.clone();
@@ -83,7 +83,7 @@ impl Fan {
             true => 1,
             false => 0,
         };
-        write(path, val.to_string().as_bytes());
+        write(path, val.to_string().as_bytes()).unwrap();
     }
 }
 
@@ -273,15 +273,15 @@ fn parse_config() -> (Vec<HeatSrc>, Vec<Fan>, u32) {
             &_ => {}
         }
     }
-    let mut name_lookup: HashMap<String, i32> = HashMap::with_capacity(heat_srcs.len());
+    let mut name_lookup: HashMap<String, usize> = HashMap::with_capacity(heat_srcs.len());
     let mut fin_heat_srcs: Vec<HeatSrc> = Vec::with_capacity(heat_srcs.len());
     for (name, src) in heat_srcs {
         fin_heat_srcs.push(src);
-        name_lookup.insert(name, (fin_heat_srcs.len() - 1) as i32);
+        name_lookup.insert(name, (fin_heat_srcs.len() - 1));
     }
     let mut fin_fans: Vec<Fan> = Vec::with_capacity(fans.len());
     for (pwm, min_pwm, max_pwm, cutoff, heat_pressure_srcs) in fans {
-        let mut heat_prs_srcs: Vec<i32> = Vec::with_capacity(heat_pressure_srcs.len());
+        let mut heat_prs_srcs: Vec<usize> = Vec::with_capacity(heat_pressure_srcs.len());
         for src in heat_pressure_srcs {
             let k = name_lookup
                 .get(&src)
@@ -310,7 +310,13 @@ fn main() {
             heat_src.run_pwm(interval_seconds);
         }
         for fan in &fans {
-            fan.set_speed(0.0);
+            let mut highest_pressure: f32 = 0.0;
+            for prs_src in &fan.heat_pressure_srcs {
+                if heat_srcs[*prs_src].last_pid > highest_pressure {
+                    highest_pressure = heat_srcs[*prs_src].last_pid;
+                }
+            }
+            fan.set_speed(highest_pressure);
         }
         thread::sleep(Duration::from_millis(interval.into()));
     }
