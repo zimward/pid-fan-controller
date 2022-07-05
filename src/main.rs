@@ -1,35 +1,65 @@
 mod pid;
+use glob::{glob, GlobError};
 use lite_json::*;
 use pid::PID;
 use std::borrow::BorrowMut;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::read_to_string;
+use std::path::{Path, PathBuf};
 use std::string::String;
+use std::thread;
+use std::time::Duration;
 
 const CONFIG_FILE: &'static str = "./fan_settings.json";
-const INTERVAL: i32 = 500; //in ms
 
 #[derive(Debug)]
 struct HeatSrc {
-    pub temp_input: String,
-    pub pid: PID,
+    temp_input: PathBuf,
+    pub last_pid: f32,
+    pid: PID,
 }
 
 impl HeatSrc {
-    fn new(temp_input: String, p: f32, i: f32, d: f32, set_point: f32) -> HeatSrc {
+    fn new(temp_input: PathBuf, p: f32, i: f32, d: f32, set_point: f32) -> HeatSrc {
         HeatSrc {
             temp_input,
+            last_pid: 0.0,
             pid: PID::new(p, i, d, set_point),
         }
+    }
+    pub fn run_pwm(&mut self, interval: f32) {
+        let mut tmp = read_to_string(self.temp_input.clone()).expect("Failed to read temperature");
+        tmp.remove(tmp.len() - 1);
+        let temp: f32 = tmp.parse().unwrap();
+        self.last_pid = self.pid.run(temp, interval);
     }
 }
 #[derive(Debug)]
 struct Fan {
-    min: i32,
-    max: i32,
+    min_pwm: i32,
+    max_pwm: i32,
     cutoff: bool,
-    heat_srcs: Vec<i32>,
-    pwm: String,
+    heat_pressure_srcs: Vec<i32>,
+    pwm: PathBuf,
+}
+
+impl Fan {
+    fn new(
+        min_pwm: i32,
+        max_pwm: i32,
+        cutoff: bool,
+        heat_pressure_srcs: Vec<i32>,
+        pwm: PathBuf,
+    ) -> Fan {
+        Fan {
+            min_pwm,
+            max_pwm,
+            cutoff,
+            heat_pressure_srcs,
+            pwm,
+        }
+    }
 }
 
 fn get_number(value: JsonValue) -> Option<f32> {
@@ -66,6 +96,17 @@ fn get_object(value: JsonValue) -> Option<JsonObject> {
     None
 }
 
+fn resolve_file_path(path: String) -> PathBuf {
+    let iter = glob(path.as_str()).expect("Failed to process glob");
+    let paths: Vec<Result<PathBuf, GlobError>> = iter.collect();
+    if paths.len() > 1 {
+        panic!("Path {} returns more than one result.", path.as_str());
+    } else if paths.len() == 0 {
+        panic!("Path {} returns no vaild result.", path.as_str());
+    }
+    paths[0].as_ref().unwrap().to_path_buf()
+}
+
 fn handle_srcs(srcs: Vec<JsonValue>) -> Vec<(String, HeatSrc)> {
     let mut configured_srcs: Vec<(String, HeatSrc)> = Vec::with_capacity(srcs.len());
     for src in srcs {
@@ -93,7 +134,9 @@ fn handle_srcs(srcs: Vec<JsonValue>) -> Vec<(String, HeatSrc)> {
                         let k: String = e.0.into_iter().collect();
                         match k.as_str() {
                             "set_point" => {
-                                set_point = get_number(e.1).expect("'set_point' must be a number");
+                                //the sysfs reading is in m°C
+                                set_point =
+                                    get_number(e.1).expect("'set_point' must be a number") * 1000;
                             }
                             "P" => {
                                 p = -get_number(e.1).expect("'P' must be a number");
@@ -111,7 +154,10 @@ fn handle_srcs(srcs: Vec<JsonValue>) -> Vec<(String, HeatSrc)> {
                 &_ => {}
             }
         }
-        configured_srcs.push((name, HeatSrc::new(temp_input, p, i, d, set_point)));
+        configured_srcs.push((
+            name,
+            HeatSrc::new(resolve_file_path(temp_input), p, i, d, set_point),
+        ));
     }
     configured_srcs
 }
@@ -123,7 +169,7 @@ fn handle_fans(fans: Vec<JsonValue>) -> Vec<(String, i32, i32, bool, Vec<String>
         let mut wildcard_path: String = "".to_string();
         let mut min_pwm: i32 = 0;
         let mut max_pwm: i32 = 255;
-        let mut cutoff: bool = true;
+        let mut cutoff: bool = false;
         let mut heat_srcs: Option<Vec<String>> = None;
         let fan = get_object(e).expect("fan entries have to be objects");
         for e in fan {
@@ -169,11 +215,10 @@ fn handle_fans(fans: Vec<JsonValue>) -> Vec<(String, i32, i32, bool, Vec<String>
         let srcs = heat_srcs.expect("fan must have 'heat_pressure_srcs'");
         configured_fans.push((wildcard_path, min_pwm, max_pwm, cutoff, srcs));
     }
-    dbg!(configured_fans.clone());
     configured_fans
 }
 
-fn parse_config() {
+fn parse_config() -> (Vec<HeatSrc>, Vec<Fan>, u32) {
     let config = match parse_json(&read_to_string(CONFIG_FILE).expect("Error reading config file"))
     {
         Ok(cfg) => cfg,
@@ -183,6 +228,8 @@ fn parse_config() {
     };
     let cfg = get_object(config).expect("config must be wrap in an object");
     let mut heat_srcs: Vec<(String, HeatSrc)> = Vec::new();
+    let mut fans: Vec<(String, i32, i32, bool, Vec<String>)> = Vec::new();
+    let mut interval: u32 = 500;
     for e in cfg {
         let typ: String = e.0.into_iter().collect();
         match typ.as_str() {
@@ -190,15 +237,51 @@ fn parse_config() {
                 heat_srcs = handle_srcs(get_array(e.1).expect("'heat_srcs' must be a array"));
             }
             "fans" => {
-                handle_fans(get_array(e.1).expect("'fans' mut be a array"));
+                fans = handle_fans(get_array(e.1).expect("'fans' mut be a array"));
+            }
+            "interval" => {
+                interval = get_integer(e.1)
+                    .expect("'interval' must be a number")
+                    .try_into()
+                    .expect("interval must be positive.");
             }
             &_ => {}
         }
     }
-    //    let heat_srcs: Vec<HeatSrc> = Vec::with_capacity(config.get("heat_srcs"));
-    //    let fans: Vec<Fan> = Vec::new();
+    let mut name_lookup: HashMap<String, i32> = HashMap::with_capacity(heat_srcs.len());
+    let mut fin_heat_srcs: Vec<HeatSrc> = Vec::with_capacity(heat_srcs.len());
+    for (name, src) in heat_srcs {
+        fin_heat_srcs.push(src);
+        name_lookup.insert(name, (fin_heat_srcs.len() - 1) as i32);
+    }
+    let mut fin_fans: Vec<Fan> = Vec::with_capacity(fans.len());
+    for (pwm, min_pwm, max_pwm, cutoff, heat_pressure_srcs) in fans {
+        let mut heat_prs_srcs: Vec<i32> = Vec::with_capacity(heat_pressure_srcs.len());
+        for src in heat_pressure_srcs {
+            let k = name_lookup
+                .get(&src)
+                .expect("heat_pressure_src entry is wrong");
+            heat_prs_srcs.push(*k);
+        }
+        fin_fans.push(Fan::new(
+            min_pwm,
+            max_pwm,
+            cutoff,
+            heat_prs_srcs,
+            resolve_file_path(pwm),
+        ));
+    }
+    (fin_heat_srcs, fin_fans, interval)
 }
 
 fn main() {
-    parse_config();
+    let (mut heat_srcs, fans, interval) = parse_config();
+    let interval_seconds: f32 = (interval as f32) / 1000.0;
+    loop {
+        for heat_src in &mut heat_srcs {
+            heat_src.run_pwm(interval_seconds);
+            println!("PID:{}", heat_src.last_pid);
+        }
+        thread::sleep(Duration::from_millis(interval.into()));
+    }
 }
