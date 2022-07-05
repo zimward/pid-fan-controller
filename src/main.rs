@@ -6,6 +6,7 @@ use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::{read_to_string, write};
+use std::panic;
 use std::path::{Path, PathBuf};
 use std::string::String;
 use std::thread;
@@ -300,6 +301,12 @@ fn parse_config() -> (Vec<HeatSrc>, Vec<Fan>, u32) {
 }
 
 fn main() {
+    panic::set_hook(Box::new(|info| {
+        let s = info.to_string();
+        let (_, s) = s.split_at(s.find("'").unwrap() + 1);
+        let (s, _) = s.split_at(s.rfind("'").unwrap());
+        println!("{}", s);
+    }));
     let (mut heat_srcs, fans, interval) = parse_config();
     let interval_seconds: f32 = (interval as f32) / 1000.0;
     for fan in &fans {
