@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::{read_to_string, write};
 use std::panic;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::string::String;
 use std::thread;
 use std::time::Duration;
@@ -248,7 +248,7 @@ fn parse_config() -> (Vec<HeatSrc>, Vec<Fan>, u32) {
     let config = match parse_json(&read_to_string(CONFIG_FILE).expect("Error reading config file"))
     {
         Ok(cfg) => cfg,
-        Err(err) => {
+        Err(_err) => {
             panic!("Error parsing config file.");
         }
     };
@@ -278,7 +278,7 @@ fn parse_config() -> (Vec<HeatSrc>, Vec<Fan>, u32) {
     let mut fin_heat_srcs: Vec<HeatSrc> = Vec::with_capacity(heat_srcs.len());
     for (name, src) in heat_srcs {
         fin_heat_srcs.push(src);
-        name_lookup.insert(name, (fin_heat_srcs.len() - 1));
+        name_lookup.insert(name, fin_heat_srcs.len() - 1);
     }
     let mut fin_fans: Vec<Fan> = Vec::with_capacity(fans.len());
     for (pwm, min_pwm, max_pwm, cutoff, heat_pressure_srcs) in fans {
