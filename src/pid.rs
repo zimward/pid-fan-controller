@@ -11,9 +11,9 @@ pub struct PID {
 impl PID {
     pub fn new(p: f32, i: f32, d: f32, setpoint: f32) -> PID {
         PID {
-            p,
-            i,
-            d,
+            p: p / 1000.0,
+            i: i / 1000.0,
+            d: d / 1000.0,
             setpoint,
             prev_error: 0f32,
             integral: 0f32,
