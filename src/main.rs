@@ -11,7 +11,7 @@ use std::string::String;
 use std::thread;
 use std::time::Duration;
 
-const CONFIG_FILE: &'static str = "./fan_settings.json";
+const CONFIG_FILE: &'static str = "/etc/pid-fan-settings.json";
 
 #[derive(Debug)]
 struct HeatSrc {
