@@ -5,7 +5,7 @@ use pid::PID;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::fs::read_to_string;
+use std::fs::{read_to_string, write};
 use std::path::{Path, PathBuf};
 use std::string::String;
 use std::thread;
@@ -37,8 +37,8 @@ impl HeatSrc {
 }
 #[derive(Debug)]
 struct Fan {
-    min_pwm: i32,
-    max_pwm: i32,
+    min_pwm: u32,
+    max_pwm: u32,
     cutoff: bool,
     heat_pressure_srcs: Vec<i32>,
     pwm: PathBuf,
@@ -46,8 +46,8 @@ struct Fan {
 
 impl Fan {
     fn new(
-        min_pwm: i32,
-        max_pwm: i32,
+        min_pwm: u32,
+        max_pwm: u32,
         cutoff: bool,
         heat_pressure_srcs: Vec<i32>,
         pwm: PathBuf,
@@ -59,6 +59,31 @@ impl Fan {
             heat_pressure_srcs,
             pwm,
         }
+    }
+    fn set_speed(&self, speed: f32) {
+        let mut pwm_duty: u32 = 0;
+        unsafe {
+            pwm_duty = self.min_pwm
+                + (((self.max_pwm - self.min_pwm) as f32) * speed)
+                    .round()
+                    .to_int_unchecked::<u32>();
+        }
+        if pwm_duty == self.min_pwm && self.cutoff {
+            pwm_duty = 0;
+        }
+        write(self.pwm.clone(), pwm_duty.to_string().as_bytes());
+    }
+    fn pwm_enable(&self, enable: bool) {
+        let mut path = self.pwm.clone();
+        let mut filename = path.file_name().unwrap().to_string_lossy().to_string();
+        filename.push_str("_enable");
+        path.pop();
+        path.push(filename);
+        let val: u32 = match enable {
+            true => 1,
+            false => 0,
+        };
+        write(path, val.to_string().as_bytes());
     }
 }
 
@@ -136,7 +161,7 @@ fn handle_srcs(srcs: Vec<JsonValue>) -> Vec<(String, HeatSrc)> {
                             "set_point" => {
                                 //the sysfs reading is in m°C
                                 set_point =
-                                    get_number(e.1).expect("'set_point' must be a number") * 1000;
+                                    get_number(e.1).expect("'set_point' must be a number") * 1000.0;
                             }
                             "P" => {
                                 p = -get_number(e.1).expect("'P' must be a number");
@@ -162,13 +187,13 @@ fn handle_srcs(srcs: Vec<JsonValue>) -> Vec<(String, HeatSrc)> {
     configured_srcs
 }
 
-fn handle_fans(fans: Vec<JsonValue>) -> Vec<(String, i32, i32, bool, Vec<String>)> {
-    let mut configured_fans: Vec<(String, i32, i32, bool, Vec<String>)> =
+fn handle_fans(fans: Vec<JsonValue>) -> Vec<(String, u32, u32, bool, Vec<String>)> {
+    let mut configured_fans: Vec<(String, u32, u32, bool, Vec<String>)> =
         Vec::with_capacity(fans.len());
     for e in fans {
         let mut wildcard_path: String = "".to_string();
-        let mut min_pwm: i32 = 0;
-        let mut max_pwm: i32 = 255;
+        let mut min_pwm: u32 = 0;
+        let mut max_pwm: u32 = 255;
         let mut cutoff: bool = false;
         let mut heat_srcs: Option<Vec<String>> = None;
         let fan = get_object(e).expect("fan entries have to be objects");
@@ -180,10 +205,10 @@ fn handle_fans(fans: Vec<JsonValue>) -> Vec<(String, i32, i32, bool, Vec<String>
                         get_string(e.1).expect("'wildcard_path' of fan has to be a string");
                 }
                 "min_pwm" => {
-                    min_pwm = get_integer(e.1).expect("'min_pwm' has to be a integer");
+                    min_pwm = get_integer(e.1).expect("'min_pwm' has to be a integer") as u32;
                 }
                 "max_pwm" => {
-                    max_pwm = get_integer(e.1).expect("'max_pwm' has to be a integer");
+                    max_pwm = get_integer(e.1).expect("'max_pwm' has to be a integer") as u32;
                 }
                 "cutoff" => {
                     if let JsonValue::Boolean(val) = e.1 {
@@ -228,7 +253,7 @@ fn parse_config() -> (Vec<HeatSrc>, Vec<Fan>, u32) {
     };
     let cfg = get_object(config).expect("config must be wrap in an object");
     let mut heat_srcs: Vec<(String, HeatSrc)> = Vec::new();
-    let mut fans: Vec<(String, i32, i32, bool, Vec<String>)> = Vec::new();
+    let mut fans: Vec<(String, u32, u32, bool, Vec<String>)> = Vec::new();
     let mut interval: u32 = 500;
     for e in cfg {
         let typ: String = e.0.into_iter().collect();
@@ -277,10 +302,15 @@ fn parse_config() -> (Vec<HeatSrc>, Vec<Fan>, u32) {
 fn main() {
     let (mut heat_srcs, fans, interval) = parse_config();
     let interval_seconds: f32 = (interval as f32) / 1000.0;
+    for fan in &fans {
+        fan.pwm_enable(true);
+    }
     loop {
         for heat_src in &mut heat_srcs {
             heat_src.run_pwm(interval_seconds);
-            println!("PID:{}", heat_src.last_pid);
+        }
+        for fan in &fans {
+            fan.set_speed(0.0);
         }
         thread::sleep(Duration::from_millis(interval.into()));
     }
