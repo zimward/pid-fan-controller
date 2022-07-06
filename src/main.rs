@@ -165,13 +165,13 @@ fn handle_srcs(srcs: Vec<JsonValue>) -> Vec<(String, HeatSrc)> {
                                     get_number(e.1).expect("'set_point' must be a number") * 1000.0;
                             }
                             "P" => {
-                                p = -get_number(e.1).expect("'P' must be a number");
+                                p = get_number(e.1).expect("'P' must be a number");
                             }
                             "I" => {
-                                i = -get_number(e.1).expect("'I' must be a number");
+                                i = get_number(e.1).expect("'I' must be a number");
                             }
                             "D" => {
-                                d = -get_number(e.1).expect("'D' must be a number");
+                                d = get_number(e.1).expect("'D' must be a number");
                             }
                             &_ => {}
                         }
