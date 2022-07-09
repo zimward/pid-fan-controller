@@ -30,7 +30,7 @@ impl HeatSrc {
         }
     }
     pub fn run_pwm(&mut self, interval: f32) {
-        let mut tmp = read_to_string(self.temp_input.clone()).expect("Failed to read temperature");
+        let mut tmp = read_to_string(&self.temp_input).expect("Failed to read temperature");
         tmp.remove(tmp.len() - 1);
         let temp: f32 = tmp.parse().unwrap();
         self.last_pid = self.pid.run(temp, interval);
@@ -67,7 +67,7 @@ impl Fan {
         if pwm_duty == self.min_pwm && self.cutoff {
             pwm_duty = 0;
         }
-        write(self.pwm.clone(), pwm_duty.to_string().as_bytes()).unwrap();
+        write(&self.pwm, pwm_duty.to_string().as_bytes()).unwrap();
     }
     fn pwm_enable(&self, enable: bool) {
         let mut path = self.pwm.clone();
