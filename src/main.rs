@@ -63,12 +63,7 @@ impl Fan {
     }
     fn set_speed(&self, speed: f32) {
         let mut pwm_duty: u32;
-        unsafe {
-            pwm_duty = self.min_pwm
-                + (((self.max_pwm - self.min_pwm) as f32) * speed)
-                    .round()
-                    .to_int_unchecked::<u32>();
-        }
+        pwm_duty = self.min_pwm + (((self.max_pwm - self.min_pwm) as f32) * speed).round() as u32;
         if pwm_duty == self.min_pwm && self.cutoff {
             pwm_duty = 0;
         }
