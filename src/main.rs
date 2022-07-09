@@ -39,7 +39,7 @@ impl HeatSrc {
 #[derive(Debug)]
 struct Fan {
     min_pwm: u32,
-    max_pwm: u32,
+    range: f32,
     cutoff: bool,
     heat_pressure_srcs: Vec<usize>,
     pwm: PathBuf,
@@ -55,7 +55,7 @@ impl Fan {
     ) -> Fan {
         Fan {
             min_pwm,
-            max_pwm,
+            range: (max_pwm - min_pwm) as f32,
             cutoff,
             heat_pressure_srcs,
             pwm,
@@ -63,7 +63,7 @@ impl Fan {
     }
     fn set_speed(&self, speed: f32) {
         let mut pwm_duty: u32;
-        pwm_duty = self.min_pwm + (((self.max_pwm - self.min_pwm) as f32) * speed).round() as u32;
+        pwm_duty = self.min_pwm + (self.range * speed).round() as u32;
         if pwm_duty == self.min_pwm && self.cutoff {
             pwm_duty = 0;
         }
