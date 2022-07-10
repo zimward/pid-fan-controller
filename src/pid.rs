@@ -23,12 +23,12 @@ impl PID {
         let error = self.setpoint - is;
         let mut output = error * self.p;
         output += ((error - self.prev_error) / delta_t) * self.d;
+        self.prev_error = error;
         //clamping output to prevent wind-up
-        if output + self.integral * self.i < 1.0f32 || output + self.integral * self.i > 0.0 {
+        if output + self.integral * self.i < 1.0f32 && output + self.integral * self.i > 0.0 {
             self.integral += error * delta_t;
         }
         output += self.integral * self.i;
-        self.prev_error = error;
         f32::max(f32::min(output, 1.0f32), 0.0)
     }
 }
