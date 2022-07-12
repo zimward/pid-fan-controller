@@ -2,15 +2,18 @@
 name = "pid-fan-controller"
 version = "0.1.0"
 edition = "2021"
-target = "stable-x86_64-unknown-linux-gnu"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 lite-json="0.2"
 glob = "0.3"
 
+[profile.dev]
+codegen-units=1
+lto = true
+
 [profile.release]
 codegen-units=1
 lto = true
 strip = true
-panic  = "abort"
+panic = 'abort'
