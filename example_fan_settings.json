@@ -1,4 +1,5 @@
 {
+    "interval":500,
     "heat_srcs":[
         {
             "name":"CPU",
