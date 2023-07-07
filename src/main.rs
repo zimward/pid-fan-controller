@@ -3,7 +3,6 @@ use glob::{glob, GlobError};
 use pid::PID;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::fmt::Debug;
 use std::fs::{read_to_string, write, File};
 use std::io::Read;
 use std::path::PathBuf;
@@ -13,7 +12,6 @@ use std::time::Duration;
 
 const CONFIG_FILE: &'static str = "/etc/pid-fan-settings.json";
 
-#[derive(Debug)]
 struct HeatSrc {
     temp_input: PathBuf,
     pub last_pid: f32,
@@ -43,7 +41,6 @@ impl HeatSrc {
     }
 }
 
-#[derive(Debug)]
 struct Fan {
     min_pwm: u32,
     range: f32,
@@ -103,19 +100,29 @@ fn resolve_file_path(path: String) -> PathBuf {
     paths[0].as_ref().unwrap().to_path_buf()
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+struct PIDCfg {
+    p: f32,
+    i: f32,
+    d: f32,
+    #[serde(rename = "set_point")]
+    setpoint: f32,
+}
+
+#[derive(Deserialize)]
 struct HeatSrcCfg {
     name: String,
     wildcard_path: String,
     #[serde(rename = "PID_params")]
-    pid: PID,
+    pid: PIDCfg,
 }
 
 fn def_max_pwm() -> u32 {
     255
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct FanCfg {
     wildcard_path: String,
     min_pwm: u32,

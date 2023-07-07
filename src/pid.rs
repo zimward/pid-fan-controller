@@ -1,16 +1,9 @@
-use serde::Deserialize;
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
 pub struct PID {
-    pub p: f32,
-    pub i: f32,
-    pub d: f32,
-    #[serde(rename = "set_point")]
-    pub setpoint: f32,
-    #[serde(skip)]
+    p: f32,
+    i: f32,
+    d: f32,
+    setpoint: f32,
     prev_error: f32,
-    #[serde(skip)]
     integral: f32,
 }
 
