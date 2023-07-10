@@ -79,11 +79,11 @@ impl Fan {
         filename.push_str("_enable");
         path.pop();
         path.push(filename);
-        let val: u32 = match enable {
-            true => 1,
-            false => 0,
+        let val = match enable {
+            true => "1",
+            false => "0",
         };
-        write(path, val.to_string().as_bytes()).unwrap();
+        write(path, val.as_bytes()).unwrap();
     }
 }
 
