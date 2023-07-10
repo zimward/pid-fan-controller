@@ -1,4 +1,3 @@
-#[derive(Debug)]
 pub struct PID {
     p: f32,
     i: f32,

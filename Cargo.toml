@@ -5,8 +5,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lite-json="0.2"
 glob = "0.3"
+serde = { version ="1.0", features= ["serde_derive"], default-features= false }
+serde_json = "1.0"
 
 [profile.dev]
 codegen-units=1
