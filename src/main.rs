@@ -1,4 +1,5 @@
 mod pid;
+use anyhow::{anyhow, Context, Result};
 use glob::{glob, GlobError};
 use pid::PID;
 use serde::Deserialize;
@@ -10,7 +11,7 @@ use std::string::String;
 use std::thread;
 use std::time::Duration;
 
-const CONFIG_FILE: &'static str = "/etc/pid-fan-settings.json";
+const CONFIG_FILE: &str = "/etc/pid-fan-settings.json";
 
 struct HeatSrc {
     temp_input: PathBuf,
@@ -18,26 +19,28 @@ struct HeatSrc {
     pid: PID,
 }
 
-fn read_c(path: &PathBuf, count: usize) -> Result<String, std::string::FromUtf8Error> {
-    let mut file = File::open(path).unwrap();
+fn read_c(path: &PathBuf, count: usize) -> Result<String> {
+    let mut file = File::open(path)?;
     let mut buf = vec![0u8; count];
-    let bytes_read = file.read(&mut buf).unwrap();
-    String::from_utf8(buf[..bytes_read].to_vec())
+    let bytes_read = file.read(&mut buf)?;
+    Ok(String::from_utf8(buf[..bytes_read].to_vec())?)
 }
 
 impl HeatSrc {
-    fn new(temp_input: PathBuf, pid: PID) -> HeatSrc {
-        HeatSrc {
+    const fn new(temp_input: PathBuf, pid: PID) -> Self {
+        Self {
             temp_input,
             last_pid: 0.0,
             pid,
         }
     }
-    pub fn run_pwm(&mut self, interval: f32) {
-        let mut tmp = read_c(&self.temp_input, 7).expect("Failed to read temperature");
-        tmp.pop();
-        let temp: f32 = tmp.parse().unwrap();
+    pub fn run_pwm(&mut self, interval: f32) -> Result<()> {
+        //temperature is never longer than 7 bytes
+        let mut temp = read_c(&self.temp_input, 7)?;
+        temp.pop();
+        let temp: f32 = temp.parse()?;
         self.last_pid = self.pid.run(temp, interval);
+        Ok(())
     }
 }
 
@@ -56,48 +59,47 @@ impl Fan {
         cutoff: bool,
         heat_pressure_srcs: Vec<usize>,
         pwm: PathBuf,
-    ) -> Fan {
-        Fan {
+    ) -> Self {
+        Self {
             min_pwm,
+            #[allow(clippy::cast_precision_loss)]
             range: (max_pwm - min_pwm) as f32,
             cutoff,
             heat_pressure_srcs,
             pwm,
         }
     }
-    fn set_speed(&self, speed: f32) {
+    fn set_speed(&self, speed: f32) -> Result<()> {
         let mut pwm_duty: u32;
-        pwm_duty = self.min_pwm + (self.range * speed).round() as u32;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let round = (self.range * speed).round() as u32;
+        pwm_duty = self.min_pwm + round;
         if pwm_duty == self.min_pwm && self.cutoff {
             pwm_duty = 0;
         }
-        write(&self.pwm, pwm_duty.to_string().as_bytes()).unwrap();
+        write(&self.pwm, pwm_duty.to_string().as_bytes())?;
+        Ok(())
     }
-    fn pwm_enable(&self, enable: bool) {
+    fn pwm_enable(&self, enable: bool) -> Result<()> {
         let mut path = self.pwm.clone();
-        let mut filename = path.file_name().unwrap().to_string_lossy().to_string();
-        filename.push_str("_enable");
-        path.pop();
-        path.push(filename);
-        let val = match enable {
-            true => "1",
-            false => "0",
-        };
-        write(path, val.as_bytes()).unwrap();
+        let path = path.as_mut_os_string();
+        path.push("_enable");
+        let val = if enable { "1" } else { "0" };
+        write(path, val.as_bytes())?;
+        Ok(())
     }
 }
 
-fn resolve_file_path(path: String) -> PathBuf {
-    let iter = glob(path.as_str()).expect("Failed to process glob");
-    let paths: Vec<Result<PathBuf, GlobError>> = iter.collect();
+fn resolve_file_path(path: &str) -> Result<PathBuf> {
+    let iter = glob(path)?;
+    let mut paths: Vec<Result<PathBuf, GlobError>> = iter.collect();
     if paths.len() > 1 {
-        eprintln!("Path {} returns more than one result.", path.as_str());
-        std::process::exit(0xFF);
-    } else if paths.len() == 0 {
-        eprintln!("Path {} returns no vaild result.", path.as_str());
-        std::process::exit(0xFF);
+        Err(anyhow!("Path {path} returns more than one result."))
+    } else if let Some(path) = paths.pop() {
+        Ok(path?)
+    } else {
+        Err(anyhow!("Path {path} returns no vaild result."))
     }
-    paths[0].as_ref().unwrap().to_path_buf()
 }
 
 #[derive(Deserialize)]
@@ -118,7 +120,7 @@ struct HeatSrcCfg {
     pid: PIDCfg,
 }
 
-fn def_max_pwm() -> u32 {
+const fn def_max_pwm() -> u32 {
     255
 }
 
@@ -133,7 +135,7 @@ struct FanCfg {
     heat_pressure_srcs: Vec<String>,
 }
 
-fn def_interval() -> u32 {
+const fn def_interval() -> u32 {
     500
 }
 
@@ -145,47 +147,43 @@ struct Config {
     interval: u32,
 }
 
-fn parse_config() -> (Vec<HeatSrc>, Vec<Fan>, u32) {
-    let conf = read_to_string(CONFIG_FILE).expect("Error reading config file");
-    let conf: Config = serde_json::from_str(&conf).expect("Error Parsing config file");
+fn parse_config() -> Result<(Vec<HeatSrc>, Vec<Fan>, u32)> {
+    let conf = read_to_string(CONFIG_FILE).context("Failed to read config File")?;
+    let conf: Config = serde_json::from_str(&conf)?;
     let mut heat_srcs: Vec<HeatSrc> = Vec::default();
     let mut fans: Vec<Fan> = Vec::default();
     let mut heat_map: HashMap<String, usize> = HashMap::default();
     for (i, heat_src) in conf.heat_srcs.iter().enumerate() {
-        let temp_input = resolve_file_path(heat_src.wildcard_path.clone());
+        let temp_input = resolve_file_path(&heat_src.wildcard_path);
         let pid = &heat_src.pid;
         heat_srcs.push(HeatSrc::new(
-            temp_input,
+            temp_input?,
             PID::new(pid.p, pid.i, pid.d, pid.setpoint * 1000.0),
         ));
         heat_map.insert(heat_src.name.clone(), i);
     }
     for fan in conf.fans {
-        let pwm = resolve_file_path(fan.wildcard_path);
+        let pwm = resolve_file_path(&fan.wildcard_path);
         let mut heat_pressure_srcs: Vec<usize> = Vec::default();
         for src in fan.heat_pressure_srcs {
-            heat_pressure_srcs.push(
-                heat_map
-                    .get(&src)
-                    .expect("Heat source {src} not found")
-                    .clone(),
-            );
+            heat_pressure_srcs.push(*heat_map.get(&src).context("Heat Source {src} not found")?);
         }
         let f = Fan::new(
             fan.min_pwm,
             fan.max_pwm,
             fan.cutoff,
             heat_pressure_srcs,
-            pwm,
+            pwm?,
         );
         fans.push(f);
     }
 
-    (heat_srcs, fans, conf.interval)
+    Ok((heat_srcs, fans, conf.interval))
 }
 
-fn main() {
-    let (mut heat_srcs, fans, interval) = parse_config();
+fn main() -> Result<()> {
+    let (mut heat_srcs, fans, interval) = parse_config()?;
+    #[allow(clippy::cast_precision_loss)]
     let interval_seconds: f32 = (interval as f32) / 1000.0;
     let mut enable = true;
     if let Some(arg) = std::env::args().nth(1) {
@@ -194,14 +192,14 @@ fn main() {
         }
     }
     for fan in &fans {
-        fan.pwm_enable(enable);
+        fan.pwm_enable(enable)?;
     }
     if !enable {
-        return;
+        return Ok(());
     }
     loop {
         for heat_src in &mut heat_srcs {
-            heat_src.run_pwm(interval_seconds);
+            heat_src.run_pwm(interval_seconds)?;
         }
         for fan in &fans {
             let mut highest_pressure: f32 = 0.0;
@@ -210,7 +208,7 @@ fn main() {
                     highest_pressure = heat_srcs[*prs_src].last_pid;
                 }
             }
-            fan.set_speed(highest_pressure);
+            fan.set_speed(highest_pressure)?;
         }
         thread::sleep(Duration::from_millis(interval.into()));
     }
