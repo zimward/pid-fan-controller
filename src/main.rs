@@ -1,7 +1,7 @@
 mod pid;
 use anyhow::{anyhow, Context, Result};
 use glob::{glob, GlobError};
-use pid::PID;
+use pid::Pid;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::{read_to_string, write, File};
@@ -16,7 +16,7 @@ const CONFIG_FILE: &str = "/etc/pid-fan-settings.json";
 struct HeatSrc {
     temp_input: PathBuf,
     pub last_pid: f32,
-    pid: PID,
+    pid: Pid,
 }
 
 fn read_c(path: &PathBuf, count: usize) -> Result<String> {
@@ -27,7 +27,7 @@ fn read_c(path: &PathBuf, count: usize) -> Result<String> {
 }
 
 impl HeatSrc {
-    const fn new(temp_input: PathBuf, pid: PID) -> Self {
+    const fn new(temp_input: PathBuf, pid: Pid) -> Self {
         Self {
             temp_input,
             last_pid: 0.0,
@@ -104,7 +104,7 @@ fn resolve_file_path(path: &str) -> Result<PathBuf> {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
-struct PIDCfg {
+struct PidCfg {
     p: f32,
     i: f32,
     d: f32,
@@ -117,7 +117,7 @@ struct HeatSrcCfg {
     name: String,
     wildcard_path: String,
     #[serde(rename = "PID_params")]
-    pid: PIDCfg,
+    pid: PidCfg,
 }
 
 const fn def_max_pwm() -> u32 {
@@ -158,7 +158,7 @@ fn parse_config() -> Result<(Vec<HeatSrc>, Vec<Fan>, u32)> {
         let pid = &heat_src.pid;
         heat_srcs.push(HeatSrc::new(
             temp_input?,
-            PID::new(pid.p, pid.i, pid.d, pid.setpoint * 1000.0),
+            Pid::new(pid.p, pid.i, pid.d, pid.setpoint * 1000.0),
         ));
         heat_map.insert(heat_src.name.clone(), i);
     }
