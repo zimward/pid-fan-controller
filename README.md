@@ -68,7 +68,7 @@ The configuration file is hardcoded to /etc/pid-fan-settings.json.
 }
 ```
 
-# Nixos Flake
+# NixOs Flake
 Import pid-fan-control:
 ```
 {
