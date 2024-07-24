@@ -84,7 +84,8 @@ impl Fan {
         let mut path = self.pwm.clone();
         let path = path.as_mut_os_string();
         path.push("_enable");
-        let val = if enable { "1" } else { "0" };
+        //0 - off 1 - manual; 2 - automatic
+        let val = if enable { "1" } else { "2" };
         write(path, val.as_bytes())?;
         Ok(())
     }
