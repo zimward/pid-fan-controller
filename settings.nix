@@ -115,6 +115,20 @@ in
         ExecStart = [ "${cfg.package}/bin/pid-fan-controller" ];
         ExecStopPost = [ "${cfg.package}/bin/pid-fan-controller disable" ];
         Restart = "always";
+        #This service needs to run as root to write to /sys. 
+        #therefore it should operate with the least amount of priviledges needed
+        ProtectHome = "yes";
+        #strict is not possible as it needs /sys
+        ProtectSystem = "full";
+        ProtectProc = "invisible";
+        PrivateNetwork = "yes";
+        NoNewPrivileges = "yes";
+        MemoryDenyWriteExecute = "yes";
+        RestrictNamespaces = "~user pid net uts mnt";
+        ProtectKernelModules = "yes";
+        RestrictRealtime = "yes";
+        SystemCallFilter = "@system-service";
+        CapabilityBoundingSet = "~CAP_*";
       };
       # restart unit if config changed
       restartTriggers = [ config.environment.etc."pid-fan-settings.json".text ];
