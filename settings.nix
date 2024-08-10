@@ -7,30 +7,28 @@ self:
 }:
 let
   cfg = config.pid-fan-controller;
-  fOpt =
-    with lib;
-    (
-      descr:
-      mkOption {
-        type = types.float;
-        description = descr;
-      }
-    );
+  fOpt = (
+    descr:
+    lib.mkOption {
+      type = lib.types.float;
+      description = descr;
+    }
+  );
   heat_src =
     { ... }:
     {
-      options = with lib; {
-        name = mkOption {
-          type = with types; uniq nonEmptyStr;
+      options = {
+        name = lib.mkOption {
+          type = lib.types.uniq lib.types.nonEmptyStr;
           description = "name of heat source";
         };
-        wildcard_path = mkOption {
-          type = types.nonEmptyStr;
+        wildcard_path = lib.mkOption {
+          type = lib.types.nonEmptyStr;
           description = "wildcard path of heat source temp_input, can contain wildcards";
         };
         PID_params = {
-          set_point = mkOption {
-            type = with types; ints.unsigned;
+          set_point = lib.mkOption {
+            type = lib.types.ints.unsigned;
             description = "set point of controller";
           };
           P = fOpt "K_p of PID controller";
@@ -43,62 +41,62 @@ let
   fan =
     { ... }:
     {
-      options = with lib; {
-        name = mkOption {
+      options = {
+        name = lib.mkOption {
           default = "";
-          type = types.str;
+          type = lib.types.str;
           description = "name to identify fan";
         };
-        wildcard_path = mkOption {
-          type = types.str;
+        wildcard_path = lib.mkOption {
+          type = lib.types.str;
           description = "wildcard path of fan pwm file";
         };
-        min_pwm = mkOption {
+        min_pwm = lib.mkOption {
           default = 0;
-          type = types.ints.between 0 255;
+          type = lib.types.ints.between 0 255;
           description = "minimum PWM fan speed";
         };
-        max_pwm = mkOption {
+        max_pwm = lib.mkOption {
           default = 255;
-          type = types.ints.between 0 255;
+          type = lib.types.ints.between 0 255;
           description = "maximum PWM fan speed";
         };
-        cutoff = mkOption {
+        cutoff = lib.mkOption {
           default = false;
-          type = types.bool;
+          type = lib.types.bool;
           description = "whether to stop fan when min_pwm is reached (eg if fan stopps spinning when min_pwm is reached)";
         };
-        heat_pressure_srcs = mkOption {
-          type = with types; nonEmptyListOf (enum (map (heat: heat.name) cfg.settings.heat_srcs));
+        heat_pressure_srcs = lib.mkOption {
+          type = lib.types.nonEmptyListOf (lib.types.enum (map (heat: heat.name) cfg.settings.heat_srcs));
           description = "heat pressure sources which are affected by the fan";
         };
       };
     };
 in
 {
-  options = with lib; {
+  options = {
     pid-fan-controller = {
-      enable = mkOption {
+      enable = lib.mkOption {
         default = false;
         description = "Enable PID fan controller";
       };
-      package = mkOption {
+      package = lib.mkOption {
         description = "PID fan controller package to use";
-        type = types.package;
+        type = lib.types.package;
         default = self.packages.${pkgs.system}.default;
       };
       settings = {
-        interval = mkOption {
+        interval = lib.mkOption {
           default = 500;
-          type = types.int;
+          type = lib.types.int;
           description = "Interval between controller cycels.";
         };
-        heat_srcs = mkOption {
-          type = with types; listOf (submodule heat_src);
+        heat_srcs = lib.mkOption {
+          type = lib.types.listOf (lib.types.submodule heat_src);
           description = "list of heat sources";
         };
-        fans = mkOption {
-          type = with types; listOf (submodule fan);
+        fans = lib.mkOption {
+          type = lib.types.listOf (lib.types.submodule fan);
           description = "list of fans";
         };
       };
@@ -128,7 +126,7 @@ in
         ProtectKernelModules = "yes";
         RestrictRealtime = "yes";
         SystemCallFilter = "@system-service";
-        CapabilityBoundingSet = "~CAP_*";
+        CapabilityBoundingSet = "~CAP_KILL CAP_WAKE_ALARM CAP_IPC_LOC CAP_BPF CAP_LINUX_IMMUTABLE CAP_BLOCK_SUSPEND CAP_MKNOD";
       };
       # restart unit if config changed
       restartTriggers = [ config.environment.etc."pid-fan-settings.json".text ];
