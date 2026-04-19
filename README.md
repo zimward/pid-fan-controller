@@ -68,30 +68,5 @@ The configuration file is hardcoded to /etc/pid-fan-settings.json.
 }
 ```
 
-# NixOs Flake
-Import pid-fan-control:
-```
-{
-  inputs={
-    pid-fan-control.url = "github:zimward/PID-fan-control";
-  };
-  outputs={self,nixpkgs,pid-fan-control}:{
-    nixosConfigurations.mySystem =nixpkgs.lib.nixosSystem {
-      modules=[
-        inputs.pid-fan-control.nixosModules.default
-        ./whatever/modules/your/config/has.nix
-      ];
-    };
-  };
-}
-```
-Configuration of the controler service
-```
-  pid-fan-controller = {
-    enable = true;
-    settings={
-      #attrset containing the same entries as the config shown above
-    }
-  };
-
-```
+# NixOS Module
+See the NixOS manual

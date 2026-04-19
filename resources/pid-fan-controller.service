@@ -1,0 +1,21 @@
+[Unit]
+Description=PID fan controller
+
+[Service]
+ExecStart=/usr/bin/pid-fan-controller
+ExecStop=/usr/bin/pid-fan-controller disable
+MemoryDenyWriteExecute=yes
+NoNewPrivileges=yes
+PrivateNetwork=yes
+ProtectHome=yes
+ProtectKernelModules=yes
+ProtectProc=invisible
+ProtectSystem=full
+Restart=always
+RestrictNamespaces=~user pid net uts mnt
+RestrictRealtime=yes
+SystemCallFilter=@system-service
+Type=simple
+
+[Install]
+WantedBy=multi-user.target

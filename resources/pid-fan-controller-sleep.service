@@ -1,0 +1,12 @@
+[Unit]
+Before=sleep.target
+StopWhenUnneeded=yes
+
+[Service]
+ExecStart=systemctl stop pid-fan-controller.service
+ExecStop=systemctl restart pid-fan-controller.service
+RemainAfterExit=true
+Type=oneshot
+
+[Install]
+WantedBy=sleep.target
