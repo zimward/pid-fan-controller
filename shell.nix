@@ -5,5 +5,7 @@ pkgs.mkShell {
   nativeBuildInputs = [
     pkgs.cargo
     pkgs.rust-analyzer
+    pkgs.clippy
+    pkgs.rustc
   ];
 }

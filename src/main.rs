@@ -53,7 +53,7 @@ struct Fan {
 }
 
 impl Fan {
-    fn new(
+    const fn new(
         min_pwm: u32,
         max_pwm: u32,
         cutoff: bool,
@@ -149,7 +149,8 @@ struct Config {
 }
 
 fn parse_config() -> Result<(Vec<HeatSrc>, Vec<Fan>, u32)> {
-    let conf = read_to_string(CONFIG_FILE).context("Failed to read config File")?;
+    let config_path =std::env::var("PID_FAN_CONFIG").unwrap_or_else(|_| CONFIG_FILE.to_string());
+    let conf = read_to_string(config_path).context("Failed to read config File")?;
     let conf: Config = serde_json::from_str(&conf)?;
     let mut heat_srcs: Vec<HeatSrc> = Vec::default();
     let mut fans: Vec<Fan> = Vec::default();
@@ -167,7 +168,7 @@ fn parse_config() -> Result<(Vec<HeatSrc>, Vec<Fan>, u32)> {
         let pwm = resolve_file_path(&fan.wildcard_path);
         let mut heat_pressure_srcs: Vec<usize> = Vec::default();
         for src in fan.heat_pressure_srcs {
-            heat_pressure_srcs.push(*heat_map.get(&src).context("Heat Source {src} not found")?);
+            heat_pressure_srcs.push(*heat_map.get(&src).context(format!("Heat Source {src} not found"))?);
         }
         let f = Fan::new(
             fan.min_pwm,
