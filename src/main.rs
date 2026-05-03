@@ -22,7 +22,7 @@ struct HeatSrc {
 fn read_c(path: &PathBuf, count: usize) -> Result<String> {
     let mut file = File::open(path)?;
     let mut buf = vec![0u8; count];
-    let bytes_read = file.read(&mut buf)?;
+    let bytes_read = file.read(&mut buf).context("failed to read file {path}")?;
     Ok(String::from_utf8(buf[..bytes_read].to_vec())?)
 }
 
@@ -77,7 +77,7 @@ impl Fan {
         if pwm_duty == self.min_pwm && self.cutoff {
             pwm_duty = 0;
         }
-        write(&self.pwm, pwm_duty.to_string().as_bytes())?;
+        write(&self.pwm, pwm_duty.to_string().as_bytes()).context("Failed to set fan speed")?;
         Ok(())
     }
     fn pwm_enable(&self, enable: bool) -> Result<()> {
