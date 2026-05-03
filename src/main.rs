@@ -77,7 +77,11 @@ impl Fan {
         if pwm_duty == self.min_pwm && self.cutoff {
             pwm_duty = 0;
         }
-        write(&self.pwm, pwm_duty.to_string().as_bytes()).context("Failed to set fan speed")?;
+        // the fan mode was possibly switched back to automatic
+        if write(&self.pwm, pwm_duty.to_string().as_bytes()).is_err(){
+            self.pwm_enable(true)?;
+            write(&self.pwm, pwm_duty.to_string().as_bytes()).context("Failed to set fan speed")?;
+        }
         Ok(())
     }
     fn pwm_enable(&self, enable: bool) -> Result<()> {
