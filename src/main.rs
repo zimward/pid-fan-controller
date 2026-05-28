@@ -36,8 +36,9 @@ impl HeatSrc {
         }
     }
     pub fn run_pwm(&mut self, interval: f32) -> Result<()> {
-        //temperature is never longer than 7 bytes
-        let mut temp = read_c(&self.temp_input, 7)?;
+        // temperature is never longer than 16 bytes,
+        // unless someone has a chip that thinks its a plasma
+        let mut temp = read_c(&self.temp_input, 16)?;
         temp.pop();
         let temp: f32 = temp.parse().context(format!("temperature contained invalid character. Read {temp}"))?;
         self.last_pid = self.pid.run(temp, interval);
@@ -116,6 +117,8 @@ struct PidCfg {
     d: f32,
     #[serde(rename = "set_point")]
     setpoint: f32,
+    #[serde(rename="integral_max")]
+    i_max: Option<f32>,
 }
 
 #[derive(Deserialize)]
@@ -165,7 +168,9 @@ fn parse_config() -> Result<(Vec<HeatSrc>, Vec<Fan>, u32)> {
         let pid = &heat_src.pid;
         heat_srcs.push(HeatSrc::new(
             temp_input?,
-            Pid::new(pid.p, pid.i, pid.d, pid.setpoint * 1000.0),
+            // the setpoint is specified in °C, but the kernel emits milli °C,
+            // set max integral value so, that with 10°C constant error it can override the proportional gain
+            Pid::new(pid.p / 1000.0, pid.i / 1000.0, pid.d / 1000.0, pid.setpoint * 1000.0,pid.i_max.unwrap_or_else(||10.0f32.mul_add(pid.p.abs(), 1.0) / pid.i.abs())*1000.0),
         ));
         heat_map.insert(heat_src.name.clone(), i);
     }
