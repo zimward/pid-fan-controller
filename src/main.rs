@@ -22,7 +22,8 @@ struct HeatSrc {
 fn read_c(path: &PathBuf, count: usize) -> Result<String> {
     let mut file = File::open(path)?;
     let mut buf = vec![0u8; count];
-    let bytes_read = file.read(&mut buf).context("Failed to read file {path}")?;
+    //if the path isn't a valid string, sucks to be you. use a utf8 fs
+    let bytes_read = file.read(&mut buf).context(format!("Failed to read file {}",path.to_str().unwrap_or_default()))?;
     Ok(String::from_utf8(buf[..bytes_read].to_vec())?)
 }
 
@@ -38,7 +39,7 @@ impl HeatSrc {
         //temperature is never longer than 7 bytes
         let mut temp = read_c(&self.temp_input, 7)?;
         temp.pop();
-        let temp: f32 = temp.parse()?;
+        let temp: f32 = temp.parse().context(format!("temperature contained invalid character. Read {temp}"))?;
         self.last_pid = self.pid.run(temp, interval);
         Ok(())
     }
