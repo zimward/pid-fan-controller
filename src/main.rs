@@ -23,7 +23,10 @@ fn read_c(path: &PathBuf, count: usize) -> Result<String> {
     let mut file = File::open(path)?;
     let mut buf = vec![0u8; count];
     //if the path isn't a valid string, sucks to be you. use a utf8 fs
-    let bytes_read = file.read(&mut buf).context(format!("Failed to read file {}",path.to_str().unwrap_or_default()))?;
+    let bytes_read = file.read(&mut buf).context(format!(
+        "Failed to read file {}",
+        path.to_str().unwrap_or_default()
+    ))?;
     Ok(String::from_utf8(buf[..bytes_read].to_vec())?)
 }
 
@@ -40,7 +43,9 @@ impl HeatSrc {
         // unless someone has a chip that thinks its a plasma
         let mut temp = read_c(&self.temp_input, 16)?;
         temp.pop();
-        let temp: f32 = temp.parse().context(format!("temperature contained invalid character. Read {temp}"))?;
+        let temp: f32 = temp.parse().context(format!(
+            "temperature contained invalid character. Read {temp}"
+        ))?;
         self.last_pid = self.pid.run(temp, interval);
         Ok(())
     }
@@ -82,7 +87,7 @@ impl Fan {
         //read pwm back to unstick weird controller?
         let _ = read_c(&self.pwm, 1);
         // the fan mode was possibly switched back to automatic
-        if write(&self.pwm, pwm_duty.to_string().as_bytes()).is_err(){
+        if write(&self.pwm, pwm_duty.to_string().as_bytes()).is_err() {
             self.pwm_enable(true).context("Failed to set fan speed")?;
             write(&self.pwm, pwm_duty.to_string().as_bytes()).context("Failed to set fan speed")?;
         }
@@ -119,7 +124,7 @@ struct PidCfg {
     d: f32,
     #[serde(rename = "set_point")]
     setpoint: f32,
-    #[serde(rename="integral_max")]
+    #[serde(rename = "integral_max")]
     i_max: Option<f32>,
 }
 
@@ -159,7 +164,7 @@ struct Config {
 }
 
 fn parse_config() -> Result<(Vec<HeatSrc>, Vec<Fan>, u32)> {
-    let config_path =std::env::var("PID_FAN_CONFIG").unwrap_or_else(|_| CONFIG_FILE.to_string());
+    let config_path = std::env::var("PID_FAN_CONFIG").unwrap_or_else(|_| CONFIG_FILE.to_string());
     let conf = read_to_string(config_path).context("Failed to read config File")?;
     let conf: Config = serde_json::from_str(&conf)?;
     let mut heat_srcs: Vec<HeatSrc> = Vec::default();
@@ -172,7 +177,15 @@ fn parse_config() -> Result<(Vec<HeatSrc>, Vec<Fan>, u32)> {
             temp_input?,
             // the setpoint is specified in °C, but the kernel emits milli °C,
             // set max integral value so, that with 10°C constant error it can override the proportional gain
-            Pid::new(pid.p / 1000.0, pid.i / 1000.0, pid.d / 1000.0, pid.setpoint * 1000.0,pid.i_max.unwrap_or_else(||10.0f32.mul_add(pid.p.abs(), 1.0) / pid.i.abs())*1000.0),
+            Pid::new(
+                pid.p / 1000.0,
+                pid.i / 1000.0,
+                pid.d / 1000.0,
+                pid.setpoint * 1000.0,
+                pid.i_max
+                    .unwrap_or_else(|| 10.0f32.mul_add(pid.p.abs(), 1.0) / pid.i.abs())
+                    * 1000.0,
+            ),
         ));
         heat_map.insert(heat_src.name.clone(), i);
     }
@@ -180,7 +193,11 @@ fn parse_config() -> Result<(Vec<HeatSrc>, Vec<Fan>, u32)> {
         let pwm = resolve_file_path(&fan.wildcard_path);
         let mut heat_pressure_srcs: Vec<usize> = Vec::default();
         for src in fan.heat_pressure_srcs {
-            heat_pressure_srcs.push(*heat_map.get(&src).context(format!("Heat Source {src} not found"))?);
+            heat_pressure_srcs.push(
+                *heat_map
+                    .get(&src)
+                    .context(format!("Heat Source {src} not found"))?,
+            );
         }
         let f = Fan::new(
             fan.min_pwm,

@@ -7,5 +7,6 @@ pkgs.mkShell {
     pkgs.rust-analyzer
     pkgs.clippy
     pkgs.rustc
+    pkgs.rustfmt
   ];
 }
