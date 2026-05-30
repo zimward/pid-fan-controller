@@ -79,6 +79,8 @@ impl Fan {
         if pwm_duty == self.min_pwm && self.cutoff {
             pwm_duty = 0;
         }
+        //read pwm back to unstick weird controller?
+        let _ = read_c(&self.pwm, 1);
         // the fan mode was possibly switched back to automatic
         if write(&self.pwm, pwm_duty.to_string().as_bytes()).is_err(){
             self.pwm_enable(true).context("Failed to set fan speed")?;
