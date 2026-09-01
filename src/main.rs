@@ -223,6 +223,13 @@ fn parse_config() -> Result<(Vec<HeatSrc>, Vec<Fan>, u32)> {
 
 fn main() -> Result<()> {
     let (mut heat_srcs, fans, interval) = parse_config()?;
+
+    if interval > 10_000 {
+        return Err(anyhow!(
+            "Interval {interval} must not be bigger than 10s (10000)!"
+        ));
+    }
+
     #[allow(clippy::cast_precision_loss)]
     let interval_seconds: f32 = (interval as f32) / 1000.0;
 
