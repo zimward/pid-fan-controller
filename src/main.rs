@@ -1,6 +1,8 @@
 mod pid;
 use anyhow::{anyhow, Context, Result};
 use glob::{glob, GlobError};
+use nix::sys::signal::{SigSet, Signal};
+use nix::sys::signalfd::{SfdFlags, SignalFd};
 use pid::Pid;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -101,6 +103,13 @@ impl Fan {
         let val = if enable { "1" } else { "2" };
         write(path, val.as_bytes())?;
         Ok(())
+    }
+}
+
+impl Drop for Fan {
+    fn drop(&mut self) {
+        //if this errors there isn't much to do
+        self.pwm_enable(false).ok();
     }
 }
 
@@ -216,19 +225,21 @@ fn main() -> Result<()> {
     let (mut heat_srcs, fans, interval) = parse_config()?;
     #[allow(clippy::cast_precision_loss)]
     let interval_seconds: f32 = (interval as f32) / 1000.0;
-    let mut enable = true;
-    if let Some(arg) = std::env::args().nth(1) {
-        if arg == "disable" {
-            enable = false;
-        }
-    }
+
+    let mut mask = SigSet::empty();
+    mask.add(Signal::SIGINT);
+    mask.add(Signal::SIGTERM);
+    mask.thread_block()?;
+    let fd = SignalFd::with_flags(&mask, SfdFlags::SFD_NONBLOCK)?;
+
+    //enable manual fan control
     for fan in &fans {
-        fan.pwm_enable(enable)?;
-    }
-    if !enable {
-        return Ok(());
+        fan.pwm_enable(true)?;
     }
     loop {
+        if let Some(_sig) = fd.read_signal()? {
+            break;
+        }
         for heat_src in &mut heat_srcs {
             heat_src.run_pwm(interval_seconds)?;
         }
@@ -243,4 +254,5 @@ fn main() -> Result<()> {
         }
         thread::sleep(Duration::from_millis(interval.into()));
     }
+    Ok(())
 }

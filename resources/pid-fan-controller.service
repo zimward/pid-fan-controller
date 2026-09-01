@@ -3,7 +3,6 @@ Description=PID fan controller
 
 [Service]
 ExecStart=/usr/bin/pid-fan-controller
-ExecStop=/usr/bin/pid-fan-controller disable
 Restart=always
 Type=simple
 UMask=7177
